@@ -66,7 +66,7 @@ export class AuthService {
 
     // Here you would typically generate a JWT token
 
-    return this.generateUserToken(existingUser.id);
+    return this.generateUserToken(existingUser.id, existingUser.role);
   }
 
   async refreshToken(refreshTokenDto: RefreshTokenDto): Promise<{
@@ -85,6 +85,14 @@ export class AuthService {
     if (!existingToken) {
       throw new UnauthorizedException('Session expired. Please log in again.');
     }
+
+    const user = await this.prisma.singup.findUnique({
+      where: { id: existingToken.userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
     // If the token is valid, delete it and generate a new one
     // This is to prevent reuse of the same refresh token
     await this.prisma.refreshToken.delete({
@@ -92,16 +100,22 @@ export class AuthService {
         id: existingToken.id,
       },
     });
-    return this.generateUserToken(existingToken.userId);
+    return this.generateUserToken(existingToken.userId, user.role);
   }
 
   ///////////////////////////HELPER FUNCTIONS/////////////////////////
 
-  async generateUserToken(userId: number): Promise<{
+  async generateUserToken(
+    userId: number,
+    role?: string,
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
   }> {
-    const access = this.jwtService.sign({ id: userId }, { expiresIn: '1h' });
+    const access = this.jwtService.sign(
+      { id: userId, role },
+      { expiresIn: '1h' },
+    );
     const refreshToken = uuidv4(); // Generate a random refresh token
     await this.storeRefreshToken(refreshToken, userId); // Store the refresh token in the database
     return {
